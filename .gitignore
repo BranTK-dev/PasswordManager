@@ -1,9 +1,13 @@
 build/
+build-*/
 *.o
 *.obj
 *.exe
 *.db
 .vscode/
 .idea/
+.qtcreator/
 CMakeCache.txt
 CMakeFiles/
+CMakeUserPresets.json
+*.autosave
