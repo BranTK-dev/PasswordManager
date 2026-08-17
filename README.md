@@ -86,8 +86,8 @@ docs/        Additional documentation
   build, blank MainWindow
 - [x] **Phase 2: Login Screen** - LoginDialog UI and login to dashboard
   flow (master password verification comes in Phase 7)
-- [ ] **Phase 3: Core Data Model** - Credential class with all fields
-- [ ] **Phase 4: CRUD Operations** - add/edit/delete dialogs, wired to
+- [x] **Phase 3: Core Data Model** - Credential class with all fields
+- [x] **Phase 4: CRUD Operations** - add/edit/delete dialogs, wired to
   an in-memory list
 - [ ] **Phase 5: SQLite Integration** - DatabaseManager, persistent
   storage
