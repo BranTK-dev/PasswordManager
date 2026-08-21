@@ -9,6 +9,9 @@
 #include <QWidget>
 #include <QMessageBox>
 #include <QLabel>
+#include <QStandardPaths>
+#include <QDir>
+#include <QCoreApplication>
 
 namespace {
 constexpr int ColWebsite = 0;
@@ -20,13 +23,31 @@ constexpr int ColModified = 4;
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
-    , m_nextId(1)
 {
     setupUi();
+
+    if (!m_db.open(databasePath())) {
+        QMessageBox::critical(this, "Database Error",
+            "Could not open the credentials database:\n" + m_db.lastError());
+    }
+
+    m_credentials = m_db.loadAll();
     refreshTable();
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow()
+{
+    m_db.close();
+}
+
+QString MainWindow::databasePath() const
+{
+    // Store the database alongside the executable's "database" folder
+    // during development. A packaged build would use a proper user
+    // data location instead (QStandardPaths::AppDataLocation).
+    QDir appDir(QCoreApplication::applicationDirPath());
+    return appDir.filePath("../database/vault.db");
+}
 
 void MainWindow::setupUi()
 {
@@ -50,7 +71,6 @@ void MainWindow::setupUi()
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     connect(m_table, &QTableWidget::itemSelectionChanged, this, &MainWindow::onSelectionChanged);
-    // Double-click a row to edit it, same as clicking Edit
     connect(m_table, &QTableWidget::itemDoubleClicked, this, &MainWindow::onEditClicked);
 
     m_addButton = new QPushButton("Add", central);
@@ -69,17 +89,16 @@ void MainWindow::setupUi()
     buttonRow->addWidget(m_deleteButton);
     buttonRow->addStretch();
 
+    m_statusLabel = new QLabel(central);
+    m_statusLabel->setStyleSheet("color: gray;");
+
     layout->addWidget(titleLabel);
     layout->addLayout(buttonRow);
     layout->addWidget(m_table);
+    layout->addWidget(m_statusLabel);
 
     central->setLayout(layout);
     setCentralWidget(central);
-}
-
-int MainWindow::nextId()
-{
-    return m_nextId++;
 }
 
 void MainWindow::refreshTable()
@@ -98,6 +117,8 @@ void MainWindow::refreshTable()
         m_table->setItem(row, ColModified, new QTableWidgetItem(
             c.dateModified().toString("yyyy-MM-dd hh:mm")));
     }
+
+    m_statusLabel->setText(QString("%1 credential(s) saved").arg(m_credentials.size()));
 }
 
 int MainWindow::selectedRow() const
@@ -120,9 +141,13 @@ void MainWindow::onAddClicked()
 {
     CredentialDialog dialog(this);
     if (dialog.exec() == QDialog::Accepted) {
-        Credential c = dialog.credential();
-        c.setId(nextId());
-        m_credentials.append(c);
+        Credential saved = m_db.insert(dialog.credential());
+        if (saved.id() < 0) {
+            QMessageBox::warning(this, "Save Failed",
+                "Could not save the credential:\n" + m_db.lastError());
+            return;
+        }
+        m_credentials.append(saved);
         refreshTable();
     }
 }
@@ -136,7 +161,16 @@ void MainWindow::onEditClicked()
 
     CredentialDialog dialog(m_credentials[row], this);
     if (dialog.exec() == QDialog::Accepted) {
-        m_credentials[row] = dialog.credential();
+        Credential updated = dialog.credential();
+        updated.setId(m_credentials[row].id());
+
+        if (!m_db.update(updated)) {
+            QMessageBox::warning(this, "Update Failed",
+                "Could not update the credential:\n" + m_db.lastError());
+            return;
+        }
+
+        m_credentials[row] = updated;
         refreshTable();
         m_table->selectRow(row);
     }
@@ -156,6 +190,12 @@ void MainWindow::onDeleteClicked()
         QMessageBox::Yes | QMessageBox::No);
 
     if (reply == QMessageBox::Yes) {
+        const int id = m_credentials[row].id();
+        if (!m_db.remove(id)) {
+            QMessageBox::warning(this, "Delete Failed",
+                "Could not delete the credential:\n" + m_db.lastError());
+            return;
+        }
         m_credentials.removeAt(row);
         refreshTable();
     }
