@@ -49,8 +49,6 @@ void CredentialDialog::setupUi()
     passwordRow->addWidget(m_passwordEdit);
     passwordRow->addWidget(m_toggleVisibilityButton);
 
-    // Categories are a fixed starter list for now. Custom categories
-    // can be added once Settings (Phase 8) exists.
     m_categoryCombo = new QComboBox(this);
     m_categoryCombo->setEditable(true);
     m_categoryCombo->addItems({"General", "Work", "Personal", "Finance", "Social", "Development"});
@@ -127,8 +125,6 @@ void CredentialDialog::onSaveClicked()
         return;
     }
 
-    // Preserve id/dateCreated if editing, otherwise these stay at
-    // their Credential defaults (id -1, dateCreated = now).
     m_credential.setWebsite(m_websiteEdit->text().trimmed());
     m_credential.setUrl(m_urlEdit->text().trimmed());
     m_credential.setUsername(m_usernameEdit->text().trimmed());

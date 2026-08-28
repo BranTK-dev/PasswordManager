@@ -10,9 +10,6 @@
 
 DatabaseManager::DatabaseManager()
 {
-    // Unique connection name per instance, avoids "connection already
-    // exists" warnings if more than one DatabaseManager is ever created
-    // (e.g. in unit tests).
     m_connectionName = QStringLiteral("pw_manager_conn_%1")
                            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
 }
@@ -51,9 +48,6 @@ void DatabaseManager::close()
         m_db.close();
     }
 
-    // m_db must be cleared (reset to a null QSqlDatabase) before
-    // removeDatabase() runs, otherwise Qt sees this object as still
-    // holding a reference to the connection and logs a warning.
     m_db = QSqlDatabase();
 
     if (QSqlDatabase::contains(m_connectionName)) {

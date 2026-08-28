@@ -21,8 +21,6 @@ public:
     explicit CredentialDialog(QWidget *parent = nullptr);
     explicit CredentialDialog(const Credential &existing, QWidget *parent = nullptr);
 
-    // Returns the credential built from the form. Only meaningful
-    // after the dialog is accepted.
     Credential credential() const;
 
 private slots:

@@ -52,7 +52,6 @@ void LoginDialog::setupUi()
     connect(m_unlockButton, &QPushButton::clicked,
             this, &LoginDialog::onUnlockClicked);
 
-    // Pressing Enter in the password field should trigger unlock too
     connect(m_passwordEdit, &QLineEdit::returnPressed,
             this, &LoginDialog::onUnlockClicked);
 
@@ -84,9 +83,6 @@ void LoginDialog::onUnlockClicked()
 {
     const QString entered = m_passwordEdit->text();
 
-    // Real master password verification (against the encrypted vault)
-    // is wired up in Phase 7. For now, just require a non-empty
-    // password so the login -> dashboard flow can be built and tested.
     if (entered.isEmpty()) {
         m_errorLabel->setText("Please enter your master password.");
         m_errorLabel->setVisible(true);
