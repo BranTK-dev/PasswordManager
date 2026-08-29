@@ -39,6 +39,10 @@ bool DatabaseManager::open(const QString &dbPath)
         return false;
     }
 
+    if (!createSettingsTableIfNeeded()) {
+        return false;
+    }
+
     return true;
 }
 
@@ -88,6 +92,88 @@ bool DatabaseManager::createTableIfNeeded()
         m_lastError = query.lastError().text();
         return false;
     }
+    return true;
+}
+
+bool DatabaseManager::createSettingsTableIfNeeded()
+{
+    QSqlQuery query(m_db);
+    const bool ok = query.exec(
+        "CREATE TABLE IF NOT EXISTS app_settings ("
+        "key TEXT PRIMARY KEY, "
+        "value TEXT"
+        ")"
+    );
+
+    if (!ok) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DatabaseManager::hasMasterPasswordSetup()
+{
+    if (!m_db.isOpen()) {
+        return false;
+    }
+
+    QSqlQuery query(m_db);
+    query.prepare("SELECT value FROM app_settings WHERE key = 'master_salt'");
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    return query.next();
+}
+
+bool DatabaseManager::saveMasterPasswordSetup(const QByteArray &salt, const QByteArray &verificationHash)
+{
+    if (!m_db.isOpen()) {
+        m_lastError = "Database is not open.";
+        return false;
+    }
+
+    QSqlQuery query(m_db);
+    query.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('master_salt', :salt)");
+    query.bindValue(":salt", QString::fromLatin1(salt.toBase64()));
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+
+    query.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('master_hash', :hash)");
+    query.bindValue(":hash", QString::fromLatin1(verificationHash.toBase64()));
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::loadMasterPasswordSetup(QByteArray &salt, QByteArray &verificationHash)
+{
+    if (!m_db.isOpen()) {
+        return false;
+    }
+
+    QSqlQuery saltQuery(m_db);
+    saltQuery.prepare("SELECT value FROM app_settings WHERE key = 'master_salt'");
+    if (!saltQuery.exec() || !saltQuery.next()) {
+        m_lastError = "No master password salt found.";
+        return false;
+    }
+    salt = QByteArray::fromBase64(saltQuery.value(0).toString().toLatin1());
+
+    QSqlQuery hashQuery(m_db);
+    hashQuery.prepare("SELECT value FROM app_settings WHERE key = 'master_hash'");
+    if (!hashQuery.exec() || !hashQuery.next()) {
+        m_lastError = "No master password hash found.";
+        return false;
+    }
+    verificationHash = QByteArray::fromBase64(hashQuery.value(0).toString().toLatin1());
+
     return true;
 }
 

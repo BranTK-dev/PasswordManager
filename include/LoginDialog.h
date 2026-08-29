@@ -12,7 +12,12 @@ class LoginDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit LoginDialog(QWidget *parent = nullptr);
+    enum class Mode {
+        Login,       // vault already has a master password, verify it
+        SetupNew     // first run, create a new master password
+    };
+
+    explicit LoginDialog(Mode mode, QWidget *parent = nullptr);
 
     // The password the user typed, valid only after accept()
     QString password() const;
@@ -24,7 +29,10 @@ private slots:
 private:
     void setupUi();
 
+    Mode m_mode;
     QLineEdit *m_passwordEdit;
+    QLineEdit *m_confirmPasswordEdit; // only used in SetupNew mode
+    QLabel *m_confirmLabel;
     QLabel *m_errorLabel;
     QPushButton *m_unlockButton;
     QPushButton *m_toggleVisibilityButton;

@@ -27,8 +27,9 @@ constexpr int ColModified = 4;
 const QString kAllCategories = QStringLiteral("All Categories");
 }
 
-MainWindow::MainWindow(QWidget *parent)
+MainWindow::MainWindow(EncryptionManager &encryptionManager, QWidget *parent)
     : QMainWindow(parent)
+    , m_encryption(encryptionManager)
 {
     setupUi();
 
@@ -38,6 +39,15 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     m_credentials = m_db.loadAll();
+
+    // Passwords are stored encrypted; decrypt each one into memory now
+    // that we're unlocked. If a password fails to decrypt (corrupted
+    // data or wrong key), leave it blank rather than showing garbage.
+    for (Credential &c : m_credentials) {
+        const QString decrypted = m_encryption.decrypt(c.password());
+        c.setPassword(decrypted);
+    }
+
     refreshCategoryFilterOptions();
     refreshTable();
 }
@@ -239,12 +249,20 @@ void MainWindow::onAddClicked()
 {
     CredentialDialog dialog(this);
     if (dialog.exec() == QDialog::Accepted) {
-        Credential saved = m_db.insert(dialog.credential());
+        Credential toSave = dialog.credential();
+        const QString plainPassword = toSave.password();
+        toSave.setPassword(m_encryption.encrypt(plainPassword));
+
+        Credential saved = m_db.insert(toSave);
         if (saved.id() < 0) {
             QMessageBox::warning(this, "Save Failed",
                 "Could not save the credential:\n" + m_db.lastError());
             return;
         }
+
+        // Keep the plaintext password in memory for display/editing;
+        // only the database copy is encrypted.
+        saved.setPassword(plainPassword);
         m_credentials.append(saved);
         refreshCategoryFilterOptions();
         refreshTable();
@@ -270,6 +288,8 @@ void MainWindow::onEditClicked()
     if (dialog.exec() == QDialog::Accepted) {
         Credential updated = dialog.credential();
         updated.setId(id);
+        const QString plainPassword = updated.password();
+        updated.setPassword(m_encryption.encrypt(plainPassword));
 
         if (!m_db.update(updated)) {
             QMessageBox::warning(this, "Update Failed",
@@ -277,6 +297,7 @@ void MainWindow::onEditClicked()
             return;
         }
 
+        updated.setPassword(plainPassword);
         m_credentials[masterIndex] = updated;
         refreshCategoryFilterOptions();
         refreshTable();

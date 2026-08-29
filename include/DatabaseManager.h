@@ -27,8 +27,17 @@ public:
     bool update(const Credential &credential);
     bool remove(int id);
 
+    // --- Master password setup storage ---
+    // Stored in a small key/value settings table, separate from
+    // credentials. Never stores the master password itself, only the
+    // salt and verification hash produced by EncryptionManager.
+    bool hasMasterPasswordSetup();
+    bool saveMasterPasswordSetup(const QByteArray &salt, const QByteArray &verificationHash);
+    bool loadMasterPasswordSetup(QByteArray &salt, QByteArray &verificationHash);
+
 private:
     bool createTableIfNeeded();
+    bool createSettingsTableIfNeeded();
 
     QSqlDatabase m_db;
     QString m_lastError;

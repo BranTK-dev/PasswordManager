@@ -5,6 +5,7 @@
 #include <QVector>
 #include "Credential.h"
 #include "DatabaseManager.h"
+#include "EncryptionManager.h"
 
 class QTableWidget;
 class QPushButton;
@@ -18,7 +19,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(EncryptionManager &encryptionManager, QWidget *parent = nullptr);
     ~MainWindow() override;
 
 private slots:
@@ -55,6 +56,7 @@ private:
     // the filtered list, not m_credentials directly.
     QVector<Credential> m_credentials;
     DatabaseManager m_db;
+    EncryptionManager &m_encryption;
 };
 
 #endif // MAINWINDOW_H

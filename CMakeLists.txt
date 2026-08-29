@@ -10,6 +10,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets Sql)
+find_package(OpenSSL REQUIRED)
 
 # Every .cpp file lives in src/, headers in include/
 file(GLOB SOURCES "src/*.cpp")
@@ -25,4 +26,5 @@ target_include_directories(PasswordManager PRIVATE include)
 target_link_libraries(PasswordManager PRIVATE
     Qt6::Widgets
     Qt6::Sql
+    OpenSSL::Crypto
 )
