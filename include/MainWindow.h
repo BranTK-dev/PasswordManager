@@ -28,6 +28,11 @@ private slots:
     void onDeleteClicked();
     void onSelectionChanged();
     void onFilterChanged();
+    void onCopyUsernameClicked();
+    void onCopyPasswordClicked();
+    void onTogglePasswordVisibility();
+    void onSettingsClicked();
+    void onAboutClicked();
 
 private:
     void setupUi();
@@ -35,6 +40,10 @@ private:
     void refreshCategoryFilterOptions();
     int selectedRow() const;
     QString databasePath() const;
+    // Maps a table row to the credential's real database id (rows
+    // reflect the filtered list, not m_credentials' order/index).
+    int credentialIdForRow(int row) const;
+    int indexForCredentialId(int id) const;
 
     // Returns the subset of m_credentials that matches the current
     // search text, category filter, and favorites-only toggle.
@@ -44,7 +53,11 @@ private:
     QPushButton *m_addButton;
     QPushButton *m_editButton;
     QPushButton *m_deleteButton;
+    QPushButton *m_copyUsernameButton;
+    QPushButton *m_copyPasswordButton;
+    QPushButton *m_togglePasswordsButton;
     QLabel *m_statusLabel;
+    bool m_passwordsVisible;
 
     QLineEdit *m_searchEdit;
     QComboBox *m_categoryFilterCombo;

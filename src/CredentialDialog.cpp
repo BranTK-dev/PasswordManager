@@ -1,4 +1,5 @@
 #include "CredentialDialog.h"
+#include "PasswordGeneratorDialog.h"
 
 #include <QLineEdit>
 #include <QComboBox>
@@ -10,6 +11,8 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
+#include <QClipboard>
+#include <QGuiApplication>
 
 CredentialDialog::CredentialDialog(QWidget *parent)
     : QDialog(parent)
@@ -45,9 +48,22 @@ void CredentialDialog::setupUi()
     connect(m_toggleVisibilityButton, &QPushButton::clicked,
             this, &CredentialDialog::togglePasswordVisibility);
 
+    m_generateButton = new QPushButton("Generate", this);
+    connect(m_generateButton, &QPushButton::clicked,
+            this, &CredentialDialog::onGeneratePasswordClicked);
+
+    auto *copyPasswordButton = new QPushButton("Copy", this);
+    connect(copyPasswordButton, &QPushButton::clicked, this, [this]() {
+        if (!m_passwordEdit->text().isEmpty()) {
+            QGuiApplication::clipboard()->setText(m_passwordEdit->text());
+        }
+    });
+
     auto *passwordRow = new QHBoxLayout();
     passwordRow->addWidget(m_passwordEdit);
     passwordRow->addWidget(m_toggleVisibilityButton);
+    passwordRow->addWidget(copyPasswordButton);
+    passwordRow->addWidget(m_generateButton);
 
     m_categoryCombo = new QComboBox(this);
     m_categoryCombo->setEditable(true);
@@ -136,6 +152,18 @@ void CredentialDialog::onSaveClicked()
     m_credential.touch();
 
     accept();
+}
+
+void CredentialDialog::onGeneratePasswordClicked()
+{
+    PasswordGeneratorDialog generatorDialog(this);
+    if (generatorDialog.exec() == QDialog::Accepted) {
+        m_passwordEdit->setText(generatorDialog.generatedPassword());
+        // Reveal the generated password briefly so the user can see
+        // what got filled in, rather than leaving it masked.
+        m_passwordEdit->setEchoMode(QLineEdit::Normal);
+        m_toggleVisibilityButton->setText("Hide");
+    }
 }
 
 Credential CredentialDialog::credential() const

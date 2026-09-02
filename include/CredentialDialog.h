@@ -26,6 +26,7 @@ public:
 private slots:
     void onSaveClicked();
     void togglePasswordVisibility();
+    void onGeneratePasswordClicked();
 
 private:
     void setupUi();
@@ -37,6 +38,7 @@ private:
     QLineEdit *m_emailEdit;
     QLineEdit *m_passwordEdit;
     QPushButton *m_toggleVisibilityButton;
+    QPushButton *m_generateButton;
     QComboBox *m_categoryCombo;
     QTextEdit *m_notesEdit;
     QCheckBox *m_favoriteCheck;

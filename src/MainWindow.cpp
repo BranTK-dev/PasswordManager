@@ -1,5 +1,7 @@
 #include "MainWindow.h"
 #include "CredentialDialog.h"
+#include "SettingsDialog.h"
+#include "AboutDialog.h"
 
 #include <QTableWidget>
 #include <QHeaderView>
@@ -16,19 +18,26 @@
 #include <QDir>
 #include <QCoreApplication>
 #include <QSet>
+#include <QMenuBar>
+#include <QMenu>
+#include <QClipboard>
+#include <QGuiApplication>
 #include <algorithm>
 
 namespace {
 constexpr int ColWebsite = 0;
 constexpr int ColUsername = 1;
-constexpr int ColCategory = 2;
-constexpr int ColFavorite = 3;
-constexpr int ColModified = 4;
+constexpr int ColPassword = 2;
+constexpr int ColCategory = 3;
+constexpr int ColFavorite = 4;
+constexpr int ColModified = 5;
 const QString kAllCategories = QStringLiteral("All Categories");
+const QString kMaskedPassword = QStringLiteral("••••••••");
 }
 
 MainWindow::MainWindow(EncryptionManager &encryptionManager, QWidget *parent)
     : QMainWindow(parent)
+    , m_passwordsVisible(false)
     , m_encryption(encryptionManager)
 {
     setupUi();
@@ -66,7 +75,19 @@ QString MainWindow::databasePath() const
 void MainWindow::setupUi()
 {
     setWindowTitle("Password Manager");
-    resize(900, 600);
+    resize(1000, 620);
+
+    // --- Menu bar ---
+    auto *fileMenu = menuBar()->addMenu("&File");
+    auto *settingsAction = fileMenu->addAction("Settings...");
+    connect(settingsAction, &QAction::triggered, this, &MainWindow::onSettingsClicked);
+    fileMenu->addSeparator();
+    auto *quitAction = fileMenu->addAction("Quit");
+    connect(quitAction, &QAction::triggered, this, &QWidget::close);
+
+    auto *helpMenu = menuBar()->addMenu("&Help");
+    auto *aboutAction = helpMenu->addAction("About");
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::onAboutClicked);
 
     auto *central = new QWidget(this);
     auto *layout = new QVBoxLayout(central);
@@ -89,14 +110,19 @@ void MainWindow::setupUi()
     m_favoritesOnlyCheck = new QCheckBox("Favorites only", central);
     connect(m_favoritesOnlyCheck, &QCheckBox::toggled, this, &MainWindow::onFilterChanged);
 
+    m_togglePasswordsButton = new QPushButton("Show Passwords", central);
+    m_togglePasswordsButton->setCheckable(true);
+    connect(m_togglePasswordsButton, &QPushButton::clicked, this, &MainWindow::onTogglePasswordVisibility);
+
     auto *filterRow = new QHBoxLayout();
     filterRow->addWidget(m_searchEdit, 1);
     filterRow->addWidget(m_categoryFilterCombo);
     filterRow->addWidget(m_favoritesOnlyCheck);
+    filterRow->addWidget(m_togglePasswordsButton);
 
     // --- Table ---
-    m_table = new QTableWidget(0, 5, central);
-    m_table->setHorizontalHeaderLabels({"Website/App", "Username", "Category", "Favorite", "Last Modified"});
+    m_table = new QTableWidget(0, 6, central);
+    m_table->setHorizontalHeaderLabels({"Website/App", "Username", "Password", "Category", "Favorite", "Last Modified"});
     m_table->horizontalHeader()->setSectionResizeMode(ColWebsite, QHeaderView::Stretch);
     m_table->horizontalHeader()->setSectionResizeMode(ColUsername, QHeaderView::Stretch);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -108,17 +134,25 @@ void MainWindow::setupUi()
     m_addButton = new QPushButton("Add", central);
     m_editButton = new QPushButton("Edit", central);
     m_deleteButton = new QPushButton("Delete", central);
+    m_copyUsernameButton = new QPushButton("Copy Username", central);
+    m_copyPasswordButton = new QPushButton("Copy Password", central);
     m_editButton->setEnabled(false);
     m_deleteButton->setEnabled(false);
+    m_copyUsernameButton->setEnabled(false);
+    m_copyPasswordButton->setEnabled(false);
 
     connect(m_addButton, &QPushButton::clicked, this, &MainWindow::onAddClicked);
     connect(m_editButton, &QPushButton::clicked, this, &MainWindow::onEditClicked);
     connect(m_deleteButton, &QPushButton::clicked, this, &MainWindow::onDeleteClicked);
+    connect(m_copyUsernameButton, &QPushButton::clicked, this, &MainWindow::onCopyUsernameClicked);
+    connect(m_copyPasswordButton, &QPushButton::clicked, this, &MainWindow::onCopyPasswordClicked);
 
     auto *buttonRow = new QHBoxLayout();
     buttonRow->addWidget(m_addButton);
     buttonRow->addWidget(m_editButton);
     buttonRow->addWidget(m_deleteButton);
+    buttonRow->addWidget(m_copyUsernameButton);
+    buttonRow->addWidget(m_copyPasswordButton);
     buttonRow->addStretch();
 
     m_statusLabel = new QLabel(central);
@@ -210,14 +244,16 @@ void MainWindow::refreshTable()
         m_table->setItem(row, ColWebsite, new QTableWidgetItem(c.website()));
         m_table->setItem(row, ColUsername, new QTableWidgetItem(
             c.username().isEmpty() ? c.email() : c.username()));
+        m_table->setItem(row, ColPassword, new QTableWidgetItem(
+            m_passwordsVisible ? c.password() : kMaskedPassword));
         m_table->setItem(row, ColCategory, new QTableWidgetItem(c.category()));
         m_table->setItem(row, ColFavorite, new QTableWidgetItem(c.isFavorite() ? "Yes" : ""));
         m_table->setItem(row, ColModified, new QTableWidgetItem(
             c.dateModified().toString("yyyy-MM-dd hh:mm")));
 
-        // Stash the credential's real id in the row so selectedRow()
-        // consumers can map back to m_credentials without relying on
-        // filtered/unfiltered index alignment.
+        // Stash the credential's real id in the row so we can map
+        // back to m_credentials without relying on filtered/unfiltered
+        // index alignment.
         m_table->item(row, ColWebsite)->setData(Qt::UserRole, c.id());
     }
 
@@ -238,11 +274,66 @@ int MainWindow::selectedRow() const
     return selected.first().row();
 }
 
+int MainWindow::credentialIdForRow(int row) const
+{
+    if (row < 0 || row >= m_table->rowCount()) {
+        return -1;
+    }
+    return m_table->item(row, ColWebsite)->data(Qt::UserRole).toInt();
+}
+
+int MainWindow::indexForCredentialId(int id) const
+{
+    const auto it = std::find_if(m_credentials.begin(), m_credentials.end(),
+        [id](const Credential &c) { return c.id() == id; });
+    if (it == m_credentials.end()) {
+        return -1;
+    }
+    return static_cast<int>(it - m_credentials.begin());
+}
+
 void MainWindow::onSelectionChanged()
 {
     const bool hasSelection = selectedRow() >= 0;
     m_editButton->setEnabled(hasSelection);
     m_deleteButton->setEnabled(hasSelection);
+    m_copyUsernameButton->setEnabled(hasSelection);
+    m_copyPasswordButton->setEnabled(hasSelection);
+}
+
+void MainWindow::onTogglePasswordVisibility()
+{
+    m_passwordsVisible = m_togglePasswordsButton->isChecked();
+    m_togglePasswordsButton->setText(m_passwordsVisible ? "Hide Passwords" : "Show Passwords");
+    refreshTable();
+}
+
+void MainWindow::onCopyUsernameClicked()
+{
+    const int row = selectedRow();
+    const int id = credentialIdForRow(row);
+    const int idx = indexForCredentialId(id);
+    if (idx < 0) {
+        return;
+    }
+
+    const Credential &c = m_credentials[idx];
+    const QString value = c.username().isEmpty() ? c.email() : c.username();
+    QGuiApplication::clipboard()->setText(value);
+    m_statusLabel->setText("Username copied to clipboard.");
+}
+
+void MainWindow::onCopyPasswordClicked()
+{
+    const int row = selectedRow();
+    const int id = credentialIdForRow(row);
+    const int idx = indexForCredentialId(id);
+    if (idx < 0) {
+        return;
+    }
+
+    QGuiApplication::clipboard()->setText(m_credentials[idx].password());
+    m_statusLabel->setText("Password copied to clipboard.");
 }
 
 void MainWindow::onAddClicked()
@@ -272,15 +363,9 @@ void MainWindow::onAddClicked()
 void MainWindow::onEditClicked()
 {
     const int row = selectedRow();
-    if (row < 0) {
-        return;
-    }
-
-    const int id = m_table->item(row, ColWebsite)->data(Qt::UserRole).toInt();
-    const int masterIndex = std::find_if(m_credentials.begin(), m_credentials.end(),
-        [id](const Credential &c) { return c.id() == id; }) - m_credentials.begin();
-
-    if (masterIndex < 0 || masterIndex >= m_credentials.size()) {
+    const int id = credentialIdForRow(row);
+    const int masterIndex = indexForCredentialId(id);
+    if (masterIndex < 0) {
         return;
     }
 
@@ -307,15 +392,9 @@ void MainWindow::onEditClicked()
 void MainWindow::onDeleteClicked()
 {
     const int row = selectedRow();
-    if (row < 0) {
-        return;
-    }
-
-    const int id = m_table->item(row, ColWebsite)->data(Qt::UserRole).toInt();
-    const int masterIndex = std::find_if(m_credentials.begin(), m_credentials.end(),
-        [id](const Credential &c) { return c.id() == id; }) - m_credentials.begin();
-
-    if (masterIndex < 0 || masterIndex >= m_credentials.size()) {
+    const int id = credentialIdForRow(row);
+    const int masterIndex = indexForCredentialId(id);
+    if (masterIndex < 0) {
         return;
     }
 
@@ -335,4 +414,67 @@ void MainWindow::onDeleteClicked()
         refreshCategoryFilterOptions();
         refreshTable();
     }
+}
+
+void MainWindow::onSettingsClicked()
+{
+    SettingsDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    // Verify the current password against what's actually stored,
+    // using a throwaway EncryptionManager so we don't disturb the
+    // live, already-unlocked m_encryption unless verification passes.
+    QByteArray salt, hash;
+    if (!m_db.loadMasterPasswordSetup(salt, hash)) {
+        QMessageBox::critical(this, "Settings Error",
+            "Could not load current vault security settings:\n" + m_db.lastError());
+        return;
+    }
+
+    EncryptionManager verifier;
+    if (!verifier.unlock(dialog.currentPassword(), salt, hash)) {
+        QMessageBox::warning(this, "Incorrect Password",
+            "Your current password was incorrect. Master password not changed.");
+        return;
+    }
+
+    // Derive a brand-new key from the new password. This mutates
+    // m_encryption in place (it's the same object main.cpp created
+    // and passed in), so every subsequent encrypt/decrypt call in
+    // this session uses the new key from here on.
+    EncryptionManager::SetupResult newSetup = m_encryption.setupMasterPassword(dialog.newPassword());
+
+    // Re-encrypt every credential's password with the new key and
+    // write it back. m_credentials already holds plaintext passwords
+    // in memory, so no decryption step is needed here.
+    for (Credential &c : m_credentials) {
+        Credential toUpdate = c;
+        toUpdate.setPassword(m_encryption.encrypt(c.password()));
+        if (!m_db.update(toUpdate)) {
+            QMessageBox::critical(this, "Settings Error",
+                QString("Failed to re-encrypt \"%1\" with the new password. "
+                        "Your vault may be in a mixed state, please contact support "
+                        "or check the database directly.\n%2")
+                    .arg(c.website(), m_db.lastError()));
+            return;
+        }
+    }
+
+    if (!m_db.saveMasterPasswordSetup(newSetup.salt, newSetup.verificationHash)) {
+        QMessageBox::critical(this, "Settings Error",
+            "Credentials were re-encrypted, but the new master password "
+            "settings could not be saved:\n" + m_db.lastError());
+        return;
+    }
+
+    QMessageBox::information(this, "Password Changed",
+        "Your master password has been changed successfully.");
+}
+
+void MainWindow::onAboutClicked()
+{
+    AboutDialog dialog(this);
+    dialog.exec();
 }
