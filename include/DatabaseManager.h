@@ -35,6 +35,12 @@ public:
     bool saveMasterPasswordSetup(const QByteArray &salt, const QByteArray &verificationHash);
     bool loadMasterPasswordSetup(QByteArray &salt, QByteArray &verificationHash);
 
+    // --- Simple app preferences ---
+    // Stored in the same key/value settings table. Only dark mode for
+    // now, but this is the place to add more toggles later.
+    bool isDarkModeEnabled();
+    bool setDarkModeEnabled(bool enabled);
+
 private:
     bool createTableIfNeeded();
     bool createSettingsTableIfNeeded();

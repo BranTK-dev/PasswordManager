@@ -2,11 +2,13 @@
 #include "LoginDialog.h"
 #include "DatabaseManager.h"
 #include "EncryptionManager.h"
+#include "Theme.h"
 
 #include <QApplication>
 #include <QMessageBox>
 #include <QDir>
 #include <QStandardPaths>
+#include <QIcon>
 
 namespace {
 
@@ -69,6 +71,7 @@ bool authenticate(DatabaseManager &db, EncryptionManager &encryptionManager)
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+    app.setWindowIcon(QIcon(":/icons/app_icon.png"));
 
     DatabaseManager db;
     if (!db.open(databasePath())) {
@@ -76,6 +79,11 @@ int main(int argc, char *argv[])
             "Could not open the credentials database:\n" + db.lastError());
         return 1;
     }
+
+    // Apply the saved theme before any window is shown, so the very
+    // first thing the user sees (the login screen) is already correct
+    // rather than flashing light-then-dark.
+    Theme::apply(db.isDarkModeEnabled());
 
     EncryptionManager encryptionManager;
     if (!authenticate(db, encryptionManager)) {

@@ -13,6 +13,7 @@ class QLabel;
 class QLineEdit;
 class QComboBox;
 class QCheckBox;
+class QAction;
 
 class MainWindow : public QMainWindow
 {
@@ -33,6 +34,7 @@ private slots:
     void onTogglePasswordVisibility();
     void onSettingsClicked();
     void onAboutClicked();
+    void onDarkModeToggled(bool enabled);
 
 private:
     void setupUi();
@@ -58,6 +60,7 @@ private:
     QPushButton *m_togglePasswordsButton;
     QLabel *m_statusLabel;
     bool m_passwordsVisible;
+    QAction *m_darkModeAction;
 
     QLineEdit *m_searchEdit;
     QComboBox *m_categoryFilterCombo;

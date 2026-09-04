@@ -16,9 +16,21 @@ find_package(OpenSSL REQUIRED)
 file(GLOB SOURCES "src/*.cpp")
 file(GLOB HEADERS "include/*.h")
 
+# Embeds resources/app_icon.png into the binary (window icon, works on
+# every platform). AUTORCC (enabled above) compiles this automatically.
+set(APP_RESOURCES resources/resources.qrc)
+
+# On Windows, also embed the .ico as the actual .exe icon (what shows
+# up in Explorer/taskbar). Harmless no-op on Linux/Mac.
+if(WIN32)
+    set(APP_ICON_RESOURCE_WINDOWS resources/app_icon.rc)
+endif()
+
 add_executable(PasswordManager
     ${SOURCES}
     ${HEADERS}
+    ${APP_RESOURCES}
+    ${APP_ICON_RESOURCE_WINDOWS}
 )
 
 target_include_directories(PasswordManager PRIVATE include)

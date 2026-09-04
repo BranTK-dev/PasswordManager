@@ -2,6 +2,7 @@
 #include "CredentialDialog.h"
 #include "SettingsDialog.h"
 #include "AboutDialog.h"
+#include "Theme.h"
 
 #include <QTableWidget>
 #include <QHeaderView>
@@ -20,6 +21,7 @@
 #include <QSet>
 #include <QMenuBar>
 #include <QMenu>
+#include <QAction>
 #include <QClipboard>
 #include <QGuiApplication>
 #include <algorithm>
@@ -46,6 +48,13 @@ MainWindow::MainWindow(EncryptionManager &encryptionManager, QWidget *parent)
         QMessageBox::critical(this, "Database Error",
             "Could not open the credentials database:\n" + m_db.lastError());
     }
+
+    // Now that the DB is open, sync the checkbox to the saved
+    // preference without re-triggering onDarkModeToggled (which would
+    // otherwise immediately re-write the same value back to disk).
+    m_darkModeAction->blockSignals(true);
+    m_darkModeAction->setChecked(m_db.isDarkModeEnabled());
+    m_darkModeAction->blockSignals(false);
 
     m_credentials = m_db.loadAll();
 
@@ -88,6 +97,13 @@ void MainWindow::setupUi()
     auto *helpMenu = menuBar()->addMenu("&Help");
     auto *aboutAction = helpMenu->addAction("About");
     connect(aboutAction, &QAction::triggered, this, &MainWindow::onAboutClicked);
+
+    auto *viewMenu = menuBar()->addMenu("&View");
+    m_darkModeAction = viewMenu->addAction("Dark Mode");
+    m_darkModeAction->setCheckable(true);
+    connect(m_darkModeAction, &QAction::toggled, this, &MainWindow::onDarkModeToggled);
+    // Actual checked state is set in the constructor, after m_db is
+    // open, setupUi() runs before the database connection exists.
 
     auto *central = new QWidget(this);
     auto *layout = new QVBoxLayout(central);
@@ -477,4 +493,17 @@ void MainWindow::onAboutClicked()
 {
     AboutDialog dialog(this);
     dialog.exec();
+}
+
+void MainWindow::onDarkModeToggled(bool enabled)
+{
+    Theme::apply(enabled);
+
+    if (!m_db.setDarkModeEnabled(enabled)) {
+        // Not worth blocking the user over, the theme still applied
+        // for this session, it just won't be remembered next launch.
+        QMessageBox::warning(this, "Settings Warning",
+            "Dark mode was applied, but the preference could not be saved:\n"
+            + m_db.lastError());
+    }
 }

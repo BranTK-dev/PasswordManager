@@ -177,6 +177,37 @@ bool DatabaseManager::loadMasterPasswordSetup(QByteArray &salt, QByteArray &veri
     return true;
 }
 
+bool DatabaseManager::isDarkModeEnabled()
+{
+    if (!m_db.isOpen()) {
+        return false;
+    }
+
+    QSqlQuery query(m_db);
+    query.prepare("SELECT value FROM app_settings WHERE key = 'dark_mode'");
+    if (!query.exec() || !query.next()) {
+        return false; // no preference saved yet, default to light mode
+    }
+    return query.value(0).toString() == "1";
+}
+
+bool DatabaseManager::setDarkModeEnabled(bool enabled)
+{
+    if (!m_db.isOpen()) {
+        m_lastError = "Database is not open.";
+        return false;
+    }
+
+    QSqlQuery query(m_db);
+    query.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('dark_mode', :value)");
+    query.bindValue(":value", enabled ? "1" : "0");
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
 QVector<Credential> DatabaseManager::loadAll()
 {
     QVector<Credential> results;
